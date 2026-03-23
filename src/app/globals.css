@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+:root {
+  --page-background: #f3efe5;
+  --page-foreground: #172033;
+  --page-surface: rgba(255, 255, 255, 0.82);
+  --page-surface-strong: rgba(255, 255, 255, 0.94);
+  --page-border: rgba(23, 32, 51, 0.1);
+  --page-muted: #667085;
+  --page-accent: #0f766e;
+  --page-accent-strong: #115e59;
+  --page-accent-soft: rgba(15, 118, 110, 0.12);
+  --page-shadow: 0 24px 80px rgba(44, 62, 80, 0.14);
+  --page-ring: rgba(15, 118, 110, 0.35);
+}
+
+.dark {
+  --page-background: #08111f;
+  --page-foreground: #e8eef8;
+  --page-surface: rgba(8, 17, 31, 0.72);
+  --page-surface-strong: rgba(12, 24, 43, 0.92);
+  --page-border: rgba(148, 163, 184, 0.16);
+  --page-muted: #98a2b3;
+  --page-accent: #5eead4;
+  --page-accent-strong: #99f6e4;
+  --page-accent-soft: rgba(94, 234, 212, 0.14);
+  --page-shadow: 0 24px 80px rgba(2, 6, 23, 0.45);
+  --page-ring: rgba(94, 234, 212, 0.3);
+}
+
+@theme inline {
+  --font-sans: "Segoe UI Variable Text", "Aptos", "Trebuchet MS", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background:
+    radial-gradient(circle at top left, rgba(20, 184, 166, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(251, 191, 36, 0.15), transparent 22%),
+    linear-gradient(160deg, var(--page-background), color-mix(in srgb, var(--page-background) 84%, white 16%));
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--page-foreground);
+  font-family: var(--font-sans);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: var(--page-accent-soft);
+}
+
+.glass-panel {
+  background: var(--page-surface);
+  border: 1px solid var(--page-border);
+  box-shadow: var(--page-shadow);
+  backdrop-filter: blur(22px);
+}
+
+.field-shell {
+  background: var(--page-surface-strong);
+  border: 1px solid var(--page-border);
+}
+
+.field-shell:focus-within {
+  border-color: var(--page-accent);
+  box-shadow: 0 0 0 4px var(--page-ring);
+}
