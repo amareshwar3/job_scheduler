@@ -1,0 +1,106 @@
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_db
+from app.schemas.job import (
+    JobCreateRequest,
+    JobDetailResponse,
+    JobListResponse,
+    JobLogCreateRequest,
+    JobLogResponse,
+    JobSnapshotCreateRequest,
+    JobSnapshotResponse,
+)
+from app.services.job_service import JobService
+
+router = APIRouter()
+
+
+def service_factory(db: Session = Depends(get_db)) -> JobService:
+    return JobService(db)
+
+
+@router.post("", response_model=JobDetailResponse, status_code=status.HTTP_201_CREATED)
+def create_job(
+    payload: JobCreateRequest,
+    service: JobService = Depends(service_factory),
+) -> JobDetailResponse:
+    return service.create_job(payload)
+
+
+@router.get("", response_model=JobListResponse)
+def list_jobs(
+    status_filter: str | None = Query(default=None, alias="status"),
+    queue_status_filter: str | None = Query(default=None, alias="queue_status"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    service: JobService = Depends(service_factory),
+) -> JobListResponse:
+    return service.list_jobs(
+        status_filter=status_filter,
+        queue_status_filter=queue_status_filter,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/{job_id}", response_model=JobDetailResponse)
+def get_job(
+    job_id: UUID,
+    service: JobService = Depends(service_factory),
+) -> JobDetailResponse:
+    job = service.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    return job
+
+
+@router.get("/{job_id}/tracking", response_model=JobDetailResponse)
+def get_tracking(
+    job_id: UUID,
+    service: JobService = Depends(service_factory),
+) -> JobDetailResponse:
+    job = service.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    return job
+
+
+@router.post("/{job_id}/logs", response_model=JobLogResponse, status_code=status.HTTP_201_CREATED)
+def add_log(
+    job_id: UUID,
+    payload: JobLogCreateRequest,
+    service: JobService = Depends(service_factory),
+) -> JobLogResponse:
+    return service.add_log(job_id=job_id, payload=payload)
+
+
+@router.get("/{job_id}/logs", response_model=list[JobLogResponse])
+def list_logs(
+    job_id: UUID,
+    service: JobService = Depends(service_factory),
+) -> list[JobLogResponse]:
+    return service.list_logs(job_id=job_id)
+
+
+@router.post(
+    "/{job_id}/snapshots",
+    response_model=JobSnapshotResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_snapshot(
+    job_id: UUID,
+    payload: JobSnapshotCreateRequest,
+    service: JobService = Depends(service_factory),
+) -> JobSnapshotResponse:
+    return service.add_snapshot(job_id=job_id, payload=payload)
+
+
+@router.get("/{job_id}/snapshots", response_model=list[JobSnapshotResponse])
+def list_snapshots(
+    job_id: UUID,
+    service: JobService = Depends(service_factory),
+) -> list[JobSnapshotResponse]:
+    return service.list_snapshots(job_id=job_id)

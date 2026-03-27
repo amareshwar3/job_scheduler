@@ -1,0 +1,33 @@
+from enum import StrEnum
+
+
+class JobLifecycleStatus(StrEnum):
+    CREATED = "created"
+    QUEUED = "queued"
+    CLAIMED = "claimed"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class QueueItemStatus(StrEnum):
+    QUEUED = "queued"
+    CLAIMED = "claimed"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class LogLevel(StrEnum):
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+class SnapshotStatus(StrEnum):
+    CREATED = "created"
+    STORED = "stored"
+    FAILED = "failed"
