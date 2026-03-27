@@ -1,106 +1,540 @@
-from sqlalchemy import MetaData
-from sqlalchemy.orm import DeclarativeBase
+from pydantic import BaseModel, ConfigDict
 
 
-naming_convention = {
-    "ix": "ix_%(column_0_label)s",
-    "uq": "uq_%(table_name)s_%(column_0_name)s",
-    "ck": "ck_%(table_name)s_%(constraint_name)s",
-    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-    "pk": "pk_%(table_name)s",
-}
-
-
-class Base(DeclarativeBase):
-    metadata = MetaData(naming_convention=naming_convention)
+class APIModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 
 
 
-
-
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.schema import CreateSchema
-
-from app.core.config import settings
-from app.db.base import Base
-from app.db.models import Job, JobLog, JobQueue, JobSnapshot, JobStatusHistory  # noqa: F401
-
-engine = create_engine(settings.database_url, echo=settings.db_echo, future=True)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
-
-
-def initialize_database() -> None:
-    with engine.begin() as connection:
-        connection.execute(CreateSchema(settings.db_schema, if_not_exists=True))
-        connection.execute(text(f"SET search_path TO {settings.db_schema}"))
-        Base.metadata.create_all(bind=connection)
-
-
-
-
-
-
-
-
-
-
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from pydantic import Field, field_validator
 
-from app.db.models import Job
+from app.core.enums import LogLevel, SnapshotStatus
+from app.schemas.common import APIModel
 
 
-class JobRepository:
+def validate_required_string(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("This field is required.")
+    return cleaned
+
+
+class SparkConfigurationInput(APIModel):
+    spark_pyspark_python: str = Field(alias="sparkPysparkPython")
+    spark_pyspark_driver_python: str = Field(alias="sparkPysparkDriverPython")
+
+    _validate_python = field_validator("spark_pyspark_python")(validate_required_string)
+    _validate_driver = field_validator("spark_pyspark_driver_python")(validate_required_string)
+
+
+class JobArgumentsInput(APIModel):
+    output_files_path: str = Field(alias="outputFilesPath")
+    checkpoints_hdfs_path: str = Field(alias="checkpointsHdfsPath")
+    hive_output_schema: str = Field(alias="hiveOutputSchema")
+    log_path: str = Field(alias="logPath")
+    hive_prefix: str = Field(alias="hivePrefix")
+    interval: str
+    num_snapshots: str = Field(alias="numSnapshots")
+    spark_config: str = Field(alias="sparkConfig")
+
+    _validate_output_files_path = field_validator("output_files_path")(validate_required_string)
+    _validate_checkpoints_hdfs_path = field_validator("checkpoints_hdfs_path")(validate_required_string)
+    _validate_hive_output_schema = field_validator("hive_output_schema")(validate_required_string)
+    _validate_log_path = field_validator("log_path")(validate_required_string)
+    _validate_hive_prefix = field_validator("hive_prefix")(validate_required_string)
+    _validate_interval = field_validator("interval")(validate_required_string)
+    _validate_num_snapshots = field_validator("num_snapshots")(validate_required_string)
+    _validate_spark_config = field_validator("spark_config")(validate_required_string)
+
+
+class JobCreateRequest(APIModel):
+    batch_name: str = Field(alias="batchName")
+    main_file: str = Field(alias="mainFile")
+    python_egg_wheel_files: list[str] = Field(default_factory=list, alias="pythonEggWheelFiles")
+    dependency_files: list[str] = Field(default_factory=list, alias="dependencyFiles")
+    spark_configuration: SparkConfigurationInput = Field(alias="sparkConfiguration")
+    job_arguments: JobArgumentsInput = Field(alias="jobArguments")
+    priority: int | None = Field(default=None, ge=1, le=1000)
+
+    _validate_batch_name = field_validator("batch_name")(validate_required_string)
+    _validate_main_file = field_validator("main_file")(validate_required_string)
+
+    @field_validator("python_egg_wheel_files", "dependency_files")
+    @classmethod
+    def trim_list(cls, value: list[str]) -> list[str]:
+        return [item.strip() for item in value if item.strip()]
+
+
+class JobLogCreateRequest(APIModel):
+    level: LogLevel = LogLevel.INFO
+    source: str = "api"
+    message: str
+    metadata_json: dict = Field(default_factory=dict, alias="metadata")
+
+    _validate_message = field_validator("message")(validate_required_string)
+    _validate_source = field_validator("source")(validate_required_string)
+
+
+class JobSnapshotCreateRequest(APIModel):
+    snapshot_name: str = Field(alias="snapshotName")
+    snapshot_type: str = Field(alias="snapshotType")
+    storage_path: str | None = Field(default=None, alias="storagePath")
+    snapshot_status: SnapshotStatus = Field(default=SnapshotStatus.CREATED, alias="snapshotStatus")
+    payload: dict = Field(default_factory=dict)
+
+    _validate_snapshot_name = field_validator("snapshot_name")(validate_required_string)
+    _validate_snapshot_type = field_validator("snapshot_type")(validate_required_string)
+
+
+class JobStatusHistoryResponse(APIModel):
+    id: UUID
+    from_status: str | None
+    to_status: str
+    source: str
+    message: str | None
+    metadata_json: dict
+    created_at: datetime
+
+
+class JobLogResponse(APIModel):
+    id: UUID
+    job_id: UUID
+    level: LogLevel
+    source: str
+    message: str
+    metadata_json: dict
+    log_timestamp: datetime
+    created_at: datetime
+
+
+class JobSnapshotResponse(APIModel):
+    id: UUID
+    job_id: UUID
+    snapshot_name: str
+    snapshot_type: str
+    snapshot_status: SnapshotStatus
+    storage_path: str | None
+    payload: dict
+    created_at: datetime
+
+
+class QueueItemResponse(APIModel):
+    id: UUID
+    status: str
+    priority: int
+    attempts: int
+    max_attempts: int
+    worker_id: str | None
+    available_at: datetime
+    claimed_at: datetime | None
+    heartbeat_at: datetime | None
+    lease_expires_at: datetime | None
+    last_error: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class JobDetailResponse(APIModel):
+    id: UUID
+    public_job_id: str
+    batch_name: str
+    main_file: str
+    python_egg_wheel_files: list[str]
+    dependency_files: list[str]
+    spark_conf: dict
+    command_arguments: dict
+    livy_payload: dict
+    generated_command: str
+    request_payload: dict
+    output_files_path: str
+    checkpoints_hdfs_path: str
+    hive_output_schema: str
+    log_path: str
+    hive_prefix: str
+    interval: str
+    num_snapshots: str
+    spark_config: str
+    current_status: str
+    queue_status: str
+    external_job_id: str | None
+    storage_resource_path: str
+    submitted_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    last_polled_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    queue_item: QueueItemResponse | None
+    status_history: list[JobStatusHistoryResponse]
+    logs: list[JobLogResponse]
+    snapshots: list[JobSnapshotResponse]
+
+
+class JobListResponse(APIModel):
+    items: list[JobDetailResponse]
+    count: int
+
+
+
+
+
+
+
+from datetime import datetime
+
+from pydantic import Field, field_validator
+
+from app.schemas.common import APIModel
+from app.schemas.job import JobDetailResponse, validate_required_string
+
+
+class QueueClaimRequest(APIModel):
+    worker_id: str = Field(alias="workerId")
+    lease_seconds: int = Field(default=300, alias="leaseSeconds", ge=30, le=86400)
+
+    _validate_worker_id = field_validator("worker_id")(validate_required_string)
+
+
+class QueueHeartbeatRequest(APIModel):
+    worker_id: str = Field(alias="workerId")
+    lease_seconds: int = Field(default=300, alias="leaseSeconds", ge=30, le=86400)
+    heartbeat_at: datetime | None = Field(default=None, alias="heartbeatAt")
+
+    _validate_worker_id = field_validator("worker_id")(validate_required_string)
+
+
+class QueueStatusUpdateRequest(APIModel):
+    worker_id: str = Field(alias="workerId")
+    message: str | None = None
+    external_job_id: str | None = Field(default=None, alias="externalJobId")
+    metadata_json: dict = Field(default_factory=dict, alias="metadata")
+
+    _validate_worker_id = field_validator("worker_id")(validate_required_string)
+
+
+class QueueClaimResponse(APIModel):
+    job: JobDetailResponse | None
+    message: str
+
+
+
+
+
+
+
+
+
+
+
+from datetime import datetime, timedelta, timezone
+from uuid import UUID
+
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.enums import JobLifecycleStatus, QueueItemStatus
+from app.db.models import Job, JobLog, JobQueue, JobSnapshot, JobStatusHistory
+from app.repositories.job_repository import JobRepository
+from app.repositories.queue_repository import QueueRepository
+from app.schemas.job import (
+    JobCreateRequest,
+    JobDetailResponse,
+    JobListResponse,
+    JobLogCreateRequest,
+    JobLogResponse,
+    JobSnapshotCreateRequest,
+    JobSnapshotResponse,
+)
+from app.schemas.queue import (
+    QueueClaimRequest,
+    QueueHeartbeatRequest,
+    QueueStatusUpdateRequest,
+)
+from app.utils.command_builder import build_job_record_data, build_public_job_id
+
+
+class JobService:
     def __init__(self, db: Session):
         self.db = db
+        self.jobs = JobRepository(db)
+        self.queue = QueueRepository(db)
 
-    def add(self, job: Job) -> Job:
-        self.db.add(job)
-        return job
+    def create_job(self, payload: JobCreateRequest) -> JobDetailResponse:
+        record = build_job_record_data(payload)
+        job = Job(
+            public_job_id=build_public_job_id(),
+            batch_name=record["batch_name"],
+            main_file=record["main_file"],
+            python_egg_wheel_files=record["python_egg_wheel_files"],
+            dependency_files=record["dependency_files"],
+            spark_conf=record["spark_conf"],
+            command_arguments=record["command_arguments"],
+            livy_payload=record["livy_payload"],
+            generated_command=record["generated_command"],
+            request_payload=record["request_payload"],
+            output_files_path=record["output_files_path"],
+            checkpoints_hdfs_path=record["checkpoints_hdfs_path"],
+            hive_output_schema=record["hive_output_schema"],
+            log_path=record["log_path"],
+            hive_prefix=record["hive_prefix"],
+            interval=record["interval"],
+            num_snapshots=record["num_snapshots"],
+            spark_config=record["spark_config"],
+            current_status=JobLifecycleStatus.QUEUED,
+            queue_status=QueueItemStatus.QUEUED,
+            storage_resource_path="pending",
+        )
+        self.jobs.add(job)
+        self.db.flush()
 
-    def list(
+        job.storage_resource_path = f"{settings.api_v1_prefix}/jobs/{job.id}"
+        queue_item = JobQueue(
+            job_id=job.id,
+            status=QueueItemStatus.QUEUED,
+            priority=payload.priority or settings.queue_default_priority,
+            max_attempts=settings.queue_default_max_attempts,
+        )
+        self.queue.add(queue_item)
+
+        history = JobStatusHistory(
+            job_id=job.id,
+            from_status=None,
+            to_status=JobLifecycleStatus.QUEUED,
+            source="api:create_job",
+            message="Job created and queued.",
+            metadata_json={"public_job_id": job.public_job_id},
+        )
+        log = JobLog(
+            job_id=job.id,
+            source="api:create_job",
+            message="Job payload stored successfully.",
+            metadata_json={"resource_path": job.storage_resource_path},
+        )
+
+        self.db.add_all([history, log])
+        self.db.commit()
+        self.db.refresh(job)
+        return JobDetailResponse.model_validate(job)
+
+    def list_jobs(
         self,
         *,
         status_filter: str | None,
         queue_status_filter: str | None,
         limit: int,
         offset: int,
-    ) -> list[Job]:
-        stmt = (
-            select(Job)
-            .options(
-                joinedload(Job.queue_item),
-                joinedload(Job.status_history),
-                joinedload(Job.logs),
-                joinedload(Job.snapshots),
-            )
-            .order_by(Job.created_at.desc())
-            .limit(limit)
-            .offset(offset)
+    ) -> JobListResponse:
+        jobs = self.jobs.list(
+            status_filter=status_filter,
+            queue_status_filter=queue_status_filter,
+            limit=limit,
+            offset=offset,
         )
-        if status_filter:
-            stmt = stmt.where(Job.current_status == status_filter)
-        if queue_status_filter:
-            stmt = stmt.where(Job.queue_status == queue_status_filter)
-        return list(self.db.scalars(stmt).unique().all())
+        return JobListResponse(
+            items=[JobDetailResponse.model_validate(job) for job in jobs],
+            count=len(jobs),
+        )
 
-    def get(self, job_id: UUID) -> Job | None:
-        stmt = (
-            select(Job)
-            .options(
-                joinedload(Job.queue_item),
-                joinedload(Job.status_history),
-                joinedload(Job.logs),
-                joinedload(Job.snapshots),
-            )
-            .where(Job.id == job_id)
+    def get_job(self, job_id: UUID) -> JobDetailResponse | None:
+        job = self.jobs.get(job_id)
+        if job is None:
+            return None
+        return JobDetailResponse.model_validate(job)
+
+    def add_log(self, job_id: UUID, payload: JobLogCreateRequest) -> JobLogResponse:
+        job = self.jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+
+        log = JobLog(
+            job_id=job_id,
+            level=payload.level,
+            source=payload.source,
+            message=payload.message,
+            metadata_json=payload.metadata_json,
         )
-        return self.db.execute(stmt).unique().scalar_one_or_none()
+        self.db.add(log)
+        self.db.commit()
+        self.db.refresh(log)
+        return JobLogResponse.model_validate(log)
+
+    def list_logs(self, job_id: UUID) -> list[JobLogResponse]:
+        job = self.jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+        return [JobLogResponse.model_validate(log) for log in job.logs]
+
+    def add_snapshot(self, job_id: UUID, payload: JobSnapshotCreateRequest) -> JobSnapshotResponse:
+        job = self.jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+
+        snapshot = JobSnapshot(
+            job_id=job_id,
+            snapshot_name=payload.snapshot_name,
+            snapshot_type=payload.snapshot_type,
+            snapshot_status=payload.snapshot_status,
+            storage_path=payload.storage_path,
+            payload=payload.payload,
+        )
+        self.db.add(snapshot)
+        self.db.commit()
+        self.db.refresh(snapshot)
+        return JobSnapshotResponse.model_validate(snapshot)
+
+    def list_snapshots(self, job_id: UUID) -> list[JobSnapshotResponse]:
+        job = self.jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+        return [JobSnapshotResponse.model_validate(snapshot) for snapshot in job.snapshots]
+
+    def claim_next_job(self, payload: QueueClaimRequest) -> JobDetailResponse | None:
+        queue_item = self.queue.get_next_queued_job()
+        if queue_item is None:
+            return None
+
+        now = datetime.now(timezone.utc)
+        queue_item.status = QueueItemStatus.CLAIMED
+        queue_item.worker_id = payload.worker_id
+        queue_item.claimed_at = now
+        queue_item.heartbeat_at = now
+        queue_item.lease_expires_at = now + timedelta(seconds=payload.lease_seconds)
+        queue_item.attempts += 1
+
+        job = queue_item.job
+        previous_status = job.current_status
+        job.current_status = JobLifecycleStatus.CLAIMED
+        job.queue_status = QueueItemStatus.CLAIMED
+        job.started_at = now
+        job.last_polled_at = now
+
+        self.db.add(
+            JobStatusHistory(
+                job_id=job.id,
+                from_status=str(previous_status),
+                to_status=JobLifecycleStatus.CLAIMED,
+                source="queue:claim",
+                message="Job claimed by worker.",
+                metadata_json={"worker_id": payload.worker_id},
+            )
+        )
+        self.db.commit()
+        self.db.refresh(job)
+        return JobDetailResponse.model_validate(job)
+
+    def heartbeat(self, job_id: UUID, payload: QueueHeartbeatRequest) -> JobDetailResponse | None:
+        queue_item = self.queue.get_by_job_id(job_id)
+        if queue_item is None:
+            return None
+        if queue_item.worker_id != payload.worker_id:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Worker mismatch.")
+
+        heartbeat_at = payload.heartbeat_at or datetime.now(timezone.utc)
+        queue_item.heartbeat_at = heartbeat_at
+        queue_item.lease_expires_at = heartbeat_at + timedelta(seconds=payload.lease_seconds)
+        queue_item.status = QueueItemStatus.RUNNING
+
+        job = queue_item.job
+        previous_status = job.current_status
+        job.current_status = JobLifecycleStatus.RUNNING
+        job.queue_status = QueueItemStatus.RUNNING
+        job.last_polled_at = heartbeat_at
+
+        if previous_status != JobLifecycleStatus.RUNNING:
+            self.db.add(
+                JobStatusHistory(
+                    job_id=job.id,
+                    from_status=str(previous_status),
+                    to_status=JobLifecycleStatus.RUNNING,
+                    source="queue:heartbeat",
+                    message="Worker heartbeat received.",
+                    metadata_json={"worker_id": payload.worker_id},
+                )
+            )
+
+        self.db.commit()
+        self.db.refresh(job)
+        return JobDetailResponse.model_validate(job)
+
+    def complete_job(self, job_id: UUID, payload: QueueStatusUpdateRequest) -> JobDetailResponse | None:
+        return self._close_job(
+            job_id=job_id,
+            payload=payload,
+            lifecycle_status=JobLifecycleStatus.COMPLETED,
+            queue_status=QueueItemStatus.COMPLETED,
+            source="queue:complete",
+        )
+
+    def fail_job(self, job_id: UUID, payload: QueueStatusUpdateRequest) -> JobDetailResponse | None:
+        return self._close_job(
+            job_id=job_id,
+            payload=payload,
+            lifecycle_status=JobLifecycleStatus.FAILED,
+            queue_status=QueueItemStatus.FAILED,
+            source="queue:fail",
+        )
+
+    def _close_job(
+        self,
+        *,
+        job_id: UUID,
+        payload: QueueStatusUpdateRequest,
+        lifecycle_status: JobLifecycleStatus,
+        queue_status: QueueItemStatus,
+        source: str,
+    ) -> JobDetailResponse | None:
+        queue_item = self.queue.get_by_job_id(job_id)
+        if queue_item is None:
+            return None
+        if queue_item.worker_id and queue_item.worker_id != payload.worker_id:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Worker mismatch.")
+
+        now = datetime.now(timezone.utc)
+        queue_item.status = queue_status
+        queue_item.heartbeat_at = now
+        queue_item.lease_expires_at = now
+        if lifecycle_status == JobLifecycleStatus.FAILED:
+            queue_item.last_error = payload.message
+
+        job = queue_item.job
+        previous_status = job.current_status
+        job.current_status = lifecycle_status
+        job.queue_status = queue_status
+        job.completed_at = now
+        job.last_polled_at = now
+        if payload.external_job_id:
+            job.external_job_id = payload.external_job_id
+
+        self.db.add(
+            JobStatusHistory(
+                job_id=job.id,
+                from_status=str(previous_status),
+                to_status=lifecycle_status,
+                source=source,
+                message=payload.message,
+                metadata_json=payload.metadata_json,
+            )
+        )
+        if payload.message:
+            self.db.add(
+                JobLog(
+                    job_id=job.id,
+                    source=source,
+                    message=payload.message,
+                    metadata_json=payload.metadata_json,
+                )
+            )
+
+        self.db.commit()
+        self.db.refresh(job)
+        return JobDetailResponse.model_validate(job)
+
 
 
 
@@ -114,39 +548,143 @@ class JobRepository:
 
 
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import uuid4
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from app.schemas.job import JobCreateRequest
 
-from app.core.enums import QueueItemStatus
-from app.db.models import JobQueue
+CURL_BASE = [
+    "curl -k --negotiate -u : \\",
+    '-H "Content-Type: application/json" \\',
+    '-H "X-Requested-By: livy" \\',
+    "-X POST https://gbl20167161.systems.uk.hsbc:28998/batches \\",
+]
 
 
-class QueueRepository:
-    def __init__(self, db: Session):
-        self.db = db
+def _escape_for_single_quoted_shell(value: str) -> str:
+    return value.replace("'", """'"'"'""")
 
-    def add(self, item: JobQueue) -> JobQueue:
-        self.db.add(item)
-        return item
 
-    def get_by_job_id(self, job_id: UUID) -> JobQueue | None:
-        stmt = (
-            select(JobQueue)
-            .options(joinedload(JobQueue.job))
-            .where(JobQueue.job_id == job_id)
-        )
-        return self.db.scalar(stmt)
+def build_livy_payload(payload: JobCreateRequest) -> dict:
+    return {
+        "name": payload.batch_name,
+        "file": payload.main_file,
+        "pyFiles": payload.python_egg_wheel_files,
+        "files": payload.dependency_files,
+        "conf": {
+            "spark.pyspark.python": payload.spark_configuration.spark_pyspark_python,
+            "spark.pyspark.driver.python": payload.spark_configuration.spark_pyspark_driver_python,
+        },
+        "args": [
+            "--output-files-path",
+            payload.job_arguments.output_files_path,
+            "--checkpoints-hdfs-path",
+            payload.job_arguments.checkpoints_hdfs_path,
+            "--hive-output-schema",
+            payload.job_arguments.hive_output_schema,
+            "--log-path",
+            payload.job_arguments.log_path,
+            "--hive-prefix",
+            payload.job_arguments.hive_prefix,
+            "--interval",
+            payload.job_arguments.interval,
+            "--num-snapshots",
+            payload.job_arguments.num_snapshots,
+            "--spark-config",
+            payload.job_arguments.spark_config,
+        ],
+    }
 
-    def get_next_queued_job(self) -> JobQueue | None:
-        now = datetime.now(timezone.utc)
-        stmt = (
-            select(JobQueue)
-            .options(joinedload(JobQueue.job))
-            .where(JobQueue.status == QueueItemStatus.QUEUED)
-            .where(JobQueue.available_at <= now)
-            .order_by(JobQueue.priority.asc(), JobQueue.created_at.asc())
-            .limit(1)
-        )
-        return self.db.scalar(stmt)
+
+def build_generated_command(livy_payload: dict) -> str:
+    import json
+
+    pretty_json = json.dumps(livy_payload, indent=2)
+    escaped_json = _escape_for_single_quoted_shell(pretty_json)
+    return f"{chr(10).join(CURL_BASE)}-d '{escaped_json}'"
+
+
+def build_job_record_data(payload: JobCreateRequest) -> dict:
+    livy_payload = build_livy_payload(payload)
+    generated_command = build_generated_command(livy_payload)
+
+    return {
+        "batch_name": payload.batch_name,
+        "main_file": payload.main_file,
+        "python_egg_wheel_files": payload.python_egg_wheel_files,
+        "dependency_files": payload.dependency_files,
+        "spark_conf": livy_payload["conf"],
+        "command_arguments": {
+            "output_files_path": payload.job_arguments.output_files_path,
+            "checkpoints_hdfs_path": payload.job_arguments.checkpoints_hdfs_path,
+            "hive_output_schema": payload.job_arguments.hive_output_schema,
+            "log_path": payload.job_arguments.log_path,
+            "hive_prefix": payload.job_arguments.hive_prefix,
+            "interval": payload.job_arguments.interval,
+            "num_snapshots": payload.job_arguments.num_snapshots,
+            "spark_config": payload.job_arguments.spark_config,
+        },
+        "livy_payload": livy_payload,
+        "generated_command": generated_command,
+        "request_payload": payload.model_dump(by_alias=True),
+        "output_files_path": payload.job_arguments.output_files_path,
+        "checkpoints_hdfs_path": payload.job_arguments.checkpoints_hdfs_path,
+        "hive_output_schema": payload.job_arguments.hive_output_schema,
+        "log_path": payload.job_arguments.log_path,
+        "hive_prefix": payload.job_arguments.hive_prefix,
+        "interval": payload.job_arguments.interval,
+        "num_snapshots": payload.job_arguments.num_snapshots,
+        "spark_config": payload.job_arguments.spark_config,
+    }
+
+
+def build_public_job_id() -> str:
+    date_part = datetime.now(timezone.utc).strftime("%Y%m%d")
+    return f"JOB-{date_part}-{uuid4().hex[:8].upper()}"
+
+
+
+
+
+
+
+
+
+
+
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.router import api_router
+from app.core.config import settings
+from app.db.session import initialize_database
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    initialize_database()
+    yield
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(api_router, prefix=settings.api_v1_prefix)
+
+
+@app.get("/", tags=["root"])
+def read_root() -> dict[str, str]:
+    return {"message": f"{settings.app_name} is running."}
