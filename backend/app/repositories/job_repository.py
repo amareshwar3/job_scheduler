@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.enums import JobLifecycleStatus, QueueItemStatus
 from app.db.models import Job
 
 
@@ -17,8 +18,8 @@ class JobRepository:
     def list(
         self,
         *,
-        status_filter: str | None,
-        queue_status_filter: str | None,
+        status_filter: JobLifecycleStatus | None,
+        queue_status_filter: QueueItemStatus | None,
         limit: int,
         offset: int,
     ) -> list[Job]:

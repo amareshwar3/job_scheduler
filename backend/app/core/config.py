@@ -1,4 +1,5 @@
 from functools import lru_cache
+import re
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,6 +28,16 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return value
         return [item.strip() for item in value.split(",") if item.strip()]
+
+    @field_validator("db_schema")
+    @classmethod
+    def validate_db_schema(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("DB_SCHEMA cannot be empty.")
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", cleaned):
+            raise ValueError("DB_SCHEMA must be a valid PostgreSQL identifier.")
+        return cleaned
 
 
 @lru_cache

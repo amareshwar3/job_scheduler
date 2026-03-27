@@ -20,7 +20,10 @@ class JobLog(Base):
         ForeignKey(f"{settings.db_schema}.jobs.id", ondelete="CASCADE"),
         index=True,
     )
-    level: Mapped[LogLevel] = mapped_column(Enum(LogLevel, name="job_log_level"), default=LogLevel.INFO)
+    level: Mapped[LogLevel] = mapped_column(
+        Enum(LogLevel, name="job_log_level", schema=settings.db_schema),
+        default=LogLevel.INFO,
+    )
     source: Mapped[str] = mapped_column(String(120), default="api")
     message: Mapped[str] = mapped_column(Text)
     metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)

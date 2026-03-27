@@ -22,7 +22,7 @@ class JobQueue(Base):
         index=True,
     )
     status: Mapped[QueueItemStatus] = mapped_column(
-        Enum(QueueItemStatus, name="queue_processing_status"),
+        Enum(QueueItemStatus, name="queue_processing_status", schema=settings.db_schema),
         default=QueueItemStatus.QUEUED,
         index=True,
     )

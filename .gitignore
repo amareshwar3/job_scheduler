@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 __pycache__/
+
+# Python backend cache and packaging artifacts
+backend/app/**/__pycache__/
+backend/app/**/*.pyc
+backend/job_scheduler_backend.egg-info/

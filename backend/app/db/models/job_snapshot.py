@@ -23,7 +23,7 @@ class JobSnapshot(Base):
     snapshot_name: Mapped[str] = mapped_column(String(255))
     snapshot_type: Mapped[str] = mapped_column(String(120))
     snapshot_status: Mapped[SnapshotStatus] = mapped_column(
-        Enum(SnapshotStatus, name="job_snapshot_status"),
+        Enum(SnapshotStatus, name="job_snapshot_status", schema=settings.db_schema),
         default=SnapshotStatus.CREATED,
     )
     storage_path: Mapped[str | None] = mapped_column(Text, nullable=True)

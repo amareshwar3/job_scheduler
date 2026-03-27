@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.core.enums import JobLifecycleStatus, QueueItemStatus
 from app.schemas.job import (
     JobCreateRequest,
     JobDetailResponse,
@@ -32,8 +33,8 @@ def create_job(
 
 @router.get("", response_model=JobListResponse)
 def list_jobs(
-    status_filter: str | None = Query(default=None, alias="status"),
-    queue_status_filter: str | None = Query(default=None, alias="queue_status"),
+    status_filter: JobLifecycleStatus | None = Query(default=None, alias="status"),
+    queue_status_filter: QueueItemStatus | None = Query(default=None, alias="queue_status"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     service: JobService = Depends(service_factory),

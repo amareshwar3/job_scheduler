@@ -92,8 +92,8 @@ class JobService:
     def list_jobs(
         self,
         *,
-        status_filter: str | None,
-        queue_status_filter: str | None,
+        status_filter: JobLifecycleStatus | None,
+        queue_status_filter: QueueItemStatus | None,
         limit: int,
         offset: int,
     ) -> JobListResponse:

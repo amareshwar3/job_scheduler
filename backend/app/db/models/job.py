@@ -34,12 +34,12 @@ class Job(Base):
     num_snapshots: Mapped[str] = mapped_column(String(100))
     spark_config: Mapped[str] = mapped_column(Text)
     current_status: Mapped[JobLifecycleStatus] = mapped_column(
-        Enum(JobLifecycleStatus, name="job_lifecycle_status"),
+        Enum(JobLifecycleStatus, name="job_lifecycle_status", schema=settings.db_schema),
         default=JobLifecycleStatus.QUEUED,
         index=True,
     )
     queue_status: Mapped[QueueItemStatus] = mapped_column(
-        Enum(QueueItemStatus, name="queue_item_status"),
+        Enum(QueueItemStatus, name="queue_item_status", schema=settings.db_schema),
         default=QueueItemStatus.QUEUED,
         index=True,
     )
