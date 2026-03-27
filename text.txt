@@ -1,33 +1,62 @@
-from enum import StrEnum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import DateTime, Enum, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.config import settings
+from app.core.enums import JobLifecycleStatus, QueueItemStatus
+from app.db.base import Base
 
 
-class JobLifecycleStatus(StrEnum):
-    CREATED = "created"
-    QUEUED = "queued"
-    CLAIMED = "claimed"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
+class Job(Base):
+    __tablename__ = "jobs"
+    __table_args__ = {"schema": settings.db_schema}
 
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_job_id: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    batch_name: Mapped[str] = mapped_column(String(255), index=True)
+    main_file: Mapped[str] = mapped_column(Text)
+    python_egg_wheel_files: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    dependency_files: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    spark_conf: Mapped[dict] = mapped_column(JSONB)
+    command_arguments: Mapped[dict] = mapped_column(JSONB)
+    livy_payload: Mapped[dict] = mapped_column(JSONB)
+    generated_command: Mapped[str] = mapped_column(Text)
+    request_payload: Mapped[dict] = mapped_column(JSONB)
+    output_files_path: Mapped[str] = mapped_column(Text)
+    checkpoints_hdfs_path: Mapped[str] = mapped_column(Text)
+    hive_output_schema: Mapped[str] = mapped_column(String(255))
+    log_path: Mapped[str] = mapped_column(Text)
+    hive_prefix: Mapped[str] = mapped_column(String(255))
+    interval: Mapped[str] = mapped_column(String(100))
+    num_snapshots: Mapped[str] = mapped_column(String(100))
+    spark_config: Mapped[str] = mapped_column(Text)
+    current_status: Mapped[JobLifecycleStatus] = mapped_column(
+        Enum(JobLifecycleStatus, name="job_lifecycle_status"),
+        default=JobLifecycleStatus.QUEUED,
+        index=True,
+    )
+    queue_status: Mapped[QueueItemStatus] = mapped_column(
+        Enum(QueueItemStatus, name="queue_item_status"),
+        default=QueueItemStatus.QUEUED,
+        index=True,
+    )
+    external_job_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    storage_resource_path: Mapped[str] = mapped_column(String(255))
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_polled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
-class QueueItemStatus(StrEnum):
-    QUEUED = "queued"
-    CLAIMED = "claimed"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-class LogLevel(StrEnum):
-    DEBUG = "debug"
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-
-
-class SnapshotStatus(StrEnum):
-    CREATED = "created"
-    STORED = "stored"
-    FAILED = "failed"
+    queue_item = relationship("JobQueue", back_populates="job", uselist=False, cascade="all, delete-orphan")
+    status_history = relationship("JobStatusHistory", back_populates="job", cascade="all, delete-orphan")
+    logs = relationship("JobLog", back_populates="job", cascade="all, delete-orphan")
+    snapshots = relationship("JobSnapshot", back_populates="job", cascade="all, delete-orphan")
