@@ -1,141 +1,163 @@
 # Job Scheduler Frontend
 
-Production-ready frontend application for configuring Livy batch job inputs and generating the final cURL command on the client side.
+Frontend for creating Livy batch job payloads and generating a ready-to-run cURL command.
 
-## Overview
+## Stack
 
-This project is built with:
-
-- Next.js 16 App Router
-- TypeScript
+- Next.js 16 (App Router)
 - React 19
+- TypeScript 5
 - Tailwind CSS 4
+- ESLint 9 + `eslint-config-next`
 
-Current scope:
+## Prerequisites
 
-- Frontend only
-- No backend calls
-- Real-time cURL generation
-- Required field validation
-- Dark and light theme toggle with `localStorage` persistence
-- Modular component and utility structure for future database integration
+- Node.js 20.9.0 or newer
+- npm 10 or newer
 
-## What The App Does
-
-The UI collects:
-
-1. Job Details
-2. Spark Configuration
-3. Job Arguments
-
-It then generates this final output in real time:
-
-- Fixed cURL headers and Livy endpoint
-- `-d '<JSON>'` payload
-- Pretty formatted JSON
-- Shell-safe escaping for single quotes
-
-The generated JSON follows this exact structure:
-
-```json
-{
-  "name": "...",
-  "file": "...",
-  "pyFiles": ["..."],
-  "files": ["..."],
-  "conf": {
-    "spark.pyspark.python": "...",
-    "spark.pyspark.driver.python": "..."
-  },
-  "args": [
-    "--output-files-path",
-    "...",
-    "--checkpoints-hdfs-path",
-    "...",
-    "--hive-output-schema",
-    "...",
-    "--log-path",
-    "...",
-    "--hive-prefix",
-    "...",
-    "--interval",
-    "...",
-    "--num-snapshots",
-    "...",
-    "--spark-config",
-    "..."
-  ]
-}
-```
-
-## Features Implemented
-
-- Responsive two-column layout
-- Clearly separated sections for all form groups
-- Exact field labels as requested
-- Multi-input chip/tag UX for:
-  - Python Egg/Wheel Files (HDFS)
-  - Dependency Files
-- Add and remove behavior for multi-value fields
-- Reusable input components
-- Reusable section wrapper
-- Live cURL preview with copy button
-- Required field validation
-- Graceful handling of empty arrays
-- Theme toggle with persisted preference
-- Separated state, validation, and cURL generation logic
-
-## Exact Commands Used To Create The App
-
-These are the commands to recreate this frontend from scratch.
-
-### 1. Scaffold the project
+Check versions:
 
 ```bash
-npx create-next-app@latest frontend --ts --tailwind --eslint --app --use-npm --src-dir --import-alias "@/*" --yes --disable-git
+node -v
+npm -v
 ```
 
-### 2. Move into the project
+## Run Existing Frontend
+
+From the `frontend` folder:
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+## Frontend Scripts
+
+- `npm run dev`: Start local dev server
+- `npm run build`: Create production build
+- `npm run start`: Run production server
+- `npm run lint`: Run ESLint
+- `npm run lint:fix`: Auto-fix lint issues
+- `npm run typecheck`: TypeScript check without emit
+
+## Create This Frontend From Scratch
+
+Use these commands to scaffold a clean frontend and configure it like this project.
+
+### 1) Scaffold
+
+```bash
+npx create-next-app@latest frontend --yes
+```
+
+This uses Next defaults (TypeScript, ESLint, Tailwind, App Router, src dir, alias `@/*`).
+
+### 2) Enter project
 
 ```bash
 cd frontend
 ```
 
-### 3. Start the development server
+### 3) Install/align dependencies
 
 ```bash
-npm run dev
+npm install next@^16.2.1 react@^19.2.4 react-dom@^19.2.4
+npm install -D typescript@^5 eslint@^9 eslint-config-next@16.2.1 @types/node@^20 @types/react@^19 @types/react-dom@^19 tailwindcss@^4 @tailwindcss/postcss@^4
 ```
 
-### 4. Verify linting
+### 4) Set package scripts and engines
+
+Use this `package.json` shape:
+
+```json
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit"
+  }
+}
+```
+
+### 5) Use stable Next config baseline
+
+`next.config.ts`
+
+```ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {};
+
+export default nextConfig;
+```
+
+### 6) Use ESLint flat config
+
+`eslint.config.mjs`
+
+```js
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+]);
+
+export default eslintConfig;
+```
+
+### 7) Validate
 
 ```bash
 npm run lint
-```
-
-### 5. Verify production build
-
-```bash
+npm run typecheck
 npm run build
 ```
 
-## Packages Installed
+## Common Troubleshooting
 
-No additional runtime packages were required beyond the official Next.js scaffold.
+If you hit Next/React/TypeScript issues after upgrades:
 
-Installed by `create-next-app`:
+1. Remove old artifacts:
 
-- `next`
-- `react`
-- `react-dom`
-- `typescript`
-- `tailwindcss`
-- `@tailwindcss/postcss`
-- `eslint`
-- `eslint-config-next`
-- `@types/node`
-- `@types/react`
-- `@types/react-dom`
+```bash
+rm -rf node_modules .next package-lock.json
+```
+
+PowerShell equivalent:
+
+```powershell
+Remove-Item -Recurse -Force node_modules, .next
+Remove-Item -Force package-lock.json
+```
+
+2. Reinstall clean:
+
+```bash
+npm install
+```
+
+3. Re-run checks:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
 
 ## Project Structure
 
@@ -145,151 +167,13 @@ frontend/
 ├─ package-lock.json
 ├─ tsconfig.json
 ├─ next.config.ts
-├─ next-env.d.ts
 ├─ eslint.config.mjs
 ├─ postcss.config.mjs
-├─ README.md
-├─ public/
-│  ├─ file.svg
-│  ├─ globe.svg
-│  ├─ next.svg
-│  ├─ vercel.svg
-│  └─ window.svg
-└─ src/
-   ├─ app/
-   │  ├─ globals.css
-   │  ├─ layout.tsx
-   │  └─ page.tsx
-   ├─ components/
-   │  ├─ common/
-   │  │  ├─ CurlPreview.tsx
-   │  │  ├─ InputField.tsx
-   │  │  ├─ MultiInputField.tsx
-   │  │  └─ SectionWrapper.tsx
-   │  ├─ job-scheduler/
-   │  │  └─ JobSchedulerBuilder.tsx
-   │  └─ theme/
-   │     ├─ ThemeProvider.tsx
-   │     └─ ThemeToggle.tsx
-   ├─ hooks/
-   │  └─ use-job-form.ts
-   ├─ lib/
-   │  ├─ curl-generator.ts
-   │  └─ validation.ts
-   └─ types/
-      └─ job-config.ts
+├─ src/
+│  ├─ app/
+│  ├─ components/
+│  ├─ hooks/
+│  ├─ lib/
+│  └─ types/
+└─ public/
 ```
-
-## Architecture
-
-### UI Layer
-
-- `src/components/common`
-  - Shared reusable UI pieces
-- `src/components/job-scheduler`
-  - Main page-level feature composition
-- `src/components/theme`
-  - Theme state integration and toggle UI
-
-### State Layer
-
-- `src/hooks/use-job-form.ts`
-  - Holds typed form state
-  - Exposes update functions
-  - Produces validation result
-  - Produces generated cURL command
-
-### Logic Layer
-
-- `src/lib/validation.ts`
-  - Required field validation rules
-- `src/lib/curl-generator.ts`
-  - Builds the JSON payload
-  - Preserves required `args` order
-  - Escapes JSON for shell-safe cURL output
-
-### Type Layer
-
-- `src/types/job-config.ts`
-  - Centralized TypeScript interfaces
-  - Initial form state
-  - Error shape definitions
-
-## Form Mapping
-
-| Form Field | JSON Output |
-| --- | --- |
-| Batch Name | `name` |
-| Main File (HDFS) | `file` |
-| Python Egg/Wheel Files (HDFS) | `pyFiles` |
-| Dependency Files | `files` |
-| Spark Config fields | `conf` |
-| Job Arguments | `args` |
-
-## Theme Implementation
-
-Theme support is implemented fully on the frontend:
-
-- Light mode and dark mode toggle
-- Preference stored in `localStorage`
-- Theme class applied to the root HTML element
-- System preference used as fallback when no saved theme exists
-
-## Validation Rules
-
-Required fields:
-
-- Batch Name
-- Main File (HDFS)
-- `spark.pyspark.python`
-- `spark.pyspark.driver.python`
-- `--output-files-path`
-- `--checkpoints-hdfs-path`
-- `--hive-output-schema`
-- `--log-path`
-- `--hive-prefix`
-- `--interval`
-- `--num-snapshots`
-- `--spark-config`
-
-Arrays:
-
-- `pyFiles` can be empty
-- `files` can be empty
-
-## How To Run
-
-```bash
-npm install
-npm run dev
-```
-
-Open:
-
-```text
-http://localhost:3000
-```
-
-## Production Checks Completed
-
-Verified successfully:
-
-- `npm run lint`
-- `npm run build`
-
-## Future Extensibility
-
-The app is intentionally structured so a backend can be added later without rewriting the UI:
-
-- form model is typed
-- payload generation is isolated
-- validation is isolated
-- UI components are reusable
-- persistence can later be added through API actions or route handlers
-
-## Notes
-
-- Backend is intentionally not included
-- No API integration is performed
-- The Livy endpoint and headers are fixed as requested
-- The generated output is preview-only for now
